@@ -64,15 +64,24 @@ void setup()
     }
 }
 
+const char* COLLECT_HEADER_KEYS[1] = { "ETag" };
+String etag = "";
+
 String getCommands() {
     HTTPClient http;
     String commandList = "";
 
     Serial.println("Fetching command list");
     http.begin("https://inkplate.home.dmsilva.com/commands.txt");
+    http.addHeader(F("If-None-Match"), etag);
+    http.collectHeaders(COLLECT_HEADER_KEYS, 1);
     int httpCode = http.GET();
     if(httpCode == HTTP_CODE_OK) {
         commandList = http.getString();
+        etag = http.header("ETag");
+        Serial.println(etag);
+    } else if (httpCode == HTTP_CODE_NOT_MODIFIED) {
+        Serial.println("Not modified");
     } else {
         Serial.println("Http error: " + httpCode);
     }
@@ -90,7 +99,6 @@ String getArgumentPattern(const String &command) {
       return "%(%s*%)";
     }
     const std::vector<String> patternList = (*findIter).second;
-    Serial.println("iterate over pattern");
     for (String s : patternList) {
         pattern.concat(s);
         pattern.concat("%s*,%s*");
@@ -215,20 +223,12 @@ void executeCommand(const String &command, const std::vector<String> &args) {
     } 
 }
 
-String oldCommandList = "";
-
 void loop()
 {
     String commandList = getCommands();
-    if (commandList != oldCommandList) {
-        Serial.println("Command list changed");
-        oldCommandList = commandList;
-        MatchState ms;
-        ms.Target((char*) commandList.c_str());
-        ms.GlobalMatch("(%a+)(%b());", &handleCommand);
-    } else {
-        Serial.println("Command list unchanged");
-    }
+    MatchState ms;
+    ms.Target((char*) commandList.c_str());
+    ms.GlobalMatch("(%a+)(%b());", &handleCommand);
 
     delay(5000);
 }
